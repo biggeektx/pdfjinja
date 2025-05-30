@@ -19,29 +19,12 @@ from pdfminer.pdftypes import PDFObjRef
 from pdfminer.layout import LAParams
 from pdfminer.converter import PDFPageAggregator
 from PIL import Image, ImageDraw, ImageFont
-from PyPDF2 import PdfFileWriter, PdfFileReader
+from PyPDF2 import PdfWriter, PdfReader
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from subprocess import Popen, PIPE
-try:
-    from cStringIO import StringIO as BytesIO
-except ImportError:
-    try:
-        from StringIO import StringIO as BytesIO
-    except ImportError:
-        from io import BytesIO
-
-PY3 = False
-if sys.version_info[0] == 3:
-    PY3 = True
-
-
-try:
-    from logging import NullHandler
-except ImportError:
-    class NullHandler(logging.Handler):
-        def emit(self, record):
-            pass
+from io import BytesIO
+from logging import NullHandler
 
 
 logger = logging.getLogger(__name__)
@@ -74,11 +57,19 @@ class Attachment(object):
         if text is not None:
             font = ImageFont.truetype(self.font, self.fontsize)
             lines = text.split(os.linesep)
-            dims = [font.getsize(l) for l in lines]
-            w = sum(w for w, h in dims)
-            h = sum(h for w, h in dims)
+            dims = []
+            for l in lines:
+                # For TrueType fonts, getbbox returns (left, top, right, bottom)
+                # For bitmap fonts (not used here for labels), getsize is (width, height)
+                bbox = font.getbbox(l) 
+                line_width = bbox[2] - bbox[0]
+                line_height = bbox[3] - bbox[1]
+                dims.append((line_width, line_height))
+            
+            w = max(w for w, h in dims) if dims else 0
+            h = sum(h for w, h in dims) if dims else 0
 
-            self.label = Image.new("RGB", (w, h), (255, 255, 255))
+            self.label = Image.new("RGB", (int(w), int(h)), (255, 255, 255))
             draw = ImageDraw.Draw(self.label)
 
             y = 0
@@ -98,7 +89,7 @@ class Attachment(object):
             pdf.drawImage(ImageReader(self.label), x, y, w, h)
 
         pdf.save()
-        return PdfFileReader(stream).getPage(0)
+        return PdfReader(stream).pages[0]
 
 
 class PdfJinja(object):
@@ -212,7 +203,7 @@ class PdfJinja(object):
         p = Popen(args, stdin=PIPE, stdout=PIPE, stderr=PIPE)
         stdout, stderr = p.communicate(fdf)
         if stderr.strip():
-            raise IOError(stderr)
+            raise IOError(stderr.decode('utf-8', errors='replace').strip())
 
         return BytesIO(stdout)
 
@@ -233,22 +224,20 @@ class PdfJinja(object):
             else:
                 # Skip the field if it is already rendered by filter
                 if field not in self.rendered:
-                    if PY3:
-                        field = field.decode('utf-8')
                     self.rendered[field] = rendered_field
 
-        filled = PdfFileReader(self.exec_pdftk(self.rendered))
+        filled = PdfReader(self.exec_pdftk(self.rendered))
         for pagenumber, watermark in self.watermarks:
-            page = filled.getPage(pagenumber)
-            page.mergePage(watermark)
+            page = filled.pages[pagenumber]
+            page.merge_page(watermark)
 
-        output = PdfFileWriter()
-        pages = pages or range(filled.getNumPages())
+        output = PdfWriter()
+        pages = pages or range(len(filled.pages))
         for p in pages:
-            output.addPage(filled.getPage(p))
+            output.add_page(filled.pages[p])
 
         for attachment in attachments:
-            output.addBlankPage().mergePage(attachment.pdf())
+            output.add_blank_page().merge_page(attachment.pdf())
 
         return output
 
