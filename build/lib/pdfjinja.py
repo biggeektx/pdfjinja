@@ -19,7 +19,7 @@ from pdfminer.pdftypes import PDFObjRef
 from pdfminer.layout import LAParams
 from pdfminer.converter import PDFPageAggregator
 from PIL import Image, ImageDraw, ImageFont
-from PyPDF2 import PdfWriter, PdfReader
+from PyPDF2 import PdfFileWriter, PdfFileReader
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from subprocess import Popen, PIPE
@@ -57,19 +57,11 @@ class Attachment(object):
         if text is not None:
             font = ImageFont.truetype(self.font, self.fontsize)
             lines = text.split(os.linesep)
-            dims = []
-            for l in lines:
-                # For TrueType fonts, getbbox returns (left, top, right, bottom)
-                # For bitmap fonts (not used here for labels), getsize is (width, height)
-                bbox = font.getbbox(l) 
-                line_width = bbox[2] - bbox[0]
-                line_height = bbox[3] - bbox[1]
-                dims.append((line_width, line_height))
-            
-            w = max(w for w, h in dims) if dims else 0
-            h = sum(h for w, h in dims) if dims else 0
+            dims = [font.getsize(l) for l in lines]
+            w = sum(w for w, h in dims)
+            h = sum(h for w, h in dims)
 
-            self.label = Image.new("RGB", (int(w), int(h)), (255, 255, 255))
+            self.label = Image.new("RGB", (w, h), (255, 255, 255))
             draw = ImageDraw.Draw(self.label)
 
             y = 0
@@ -89,7 +81,7 @@ class Attachment(object):
             pdf.drawImage(ImageReader(self.label), x, y, w, h)
 
         pdf.save()
-        return PdfReader(stream).pages[0]
+        return PdfFileReader(stream).getPage(0)
 
 
 class PdfJinja(object):
@@ -226,18 +218,18 @@ class PdfJinja(object):
                 if field not in self.rendered:
                     self.rendered[field] = rendered_field
 
-        filled = PdfReader(self.exec_pdftk(self.rendered))
+        filled = PdfFileReader(self.exec_pdftk(self.rendered))
         for pagenumber, watermark in self.watermarks:
-            page = filled.pages[pagenumber]
-            page.merge_page(watermark)
+            page = filled.getPage(pagenumber)
+            page.mergePage(watermark)
 
-        output = PdfWriter()
-        pages = pages or range(len(filled.pages))
+        output = PdfFileWriter()
+        pages = pages or range(filled.getNumPages())
         for p in pages:
-            output.add_page(filled.pages[p])
+            output.addPage(filled.getPage(p))
 
         for attachment in attachments:
-            output.add_blank_page().merge_page(attachment.pdf())
+            output.addBlankPage().mergePage(attachment.pdf())
 
         return output
 
