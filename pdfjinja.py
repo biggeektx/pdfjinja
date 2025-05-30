@@ -23,8 +23,25 @@ from PyPDF2 import PdfWriter, PdfReader
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from subprocess import Popen, PIPE
-from io import BytesIO
-from logging import NullHandler
+try:
+    from cStringIO import StringIO as BytesIO
+except ImportError:
+    try:
+        from StringIO import StringIO as BytesIO
+    except ImportError:
+        from io import BytesIO
+
+PY3 = False
+if sys.version_info[0] == 3:
+    PY3 = True
+
+
+try:
+    from logging import NullHandler
+except ImportError:
+    class NullHandler(logging.Handler):
+        def emit(self, record):
+            pass
 
 
 logger = logging.getLogger(__name__)
@@ -61,11 +78,11 @@ class Attachment(object):
             for l in lines:
                 # For TrueType fonts, getbbox returns (left, top, right, bottom)
                 # For bitmap fonts (not used here for labels), getsize is (width, height)
-                bbox = font.getbbox(l) 
+                bbox = font.getbbox(l)
                 line_width = bbox[2] - bbox[0]
                 line_height = bbox[3] - bbox[1]
                 dims.append((line_width, line_height))
-            
+
             w = max(w for w, h in dims) if dims else 0
             h = sum(h for w, h in dims) if dims else 0
 
