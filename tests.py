@@ -1,6 +1,12 @@
 import json
 import os
-from io import BytesIO
+try:
+    from cStringIO import StringIO as BytesIO
+except ImportError:
+    try:
+        from StringIO import StringIO as BytesIO
+    except ImportError:
+        from io import BytesIO
 import sys
 import unittest
 
