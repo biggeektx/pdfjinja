@@ -9,7 +9,7 @@ import os
 import time
 
 from fdfgen import forge_fdf
-from jinja2 import Environment, TemplateSyntaxError
+from jinja2 import Environment, TemplateSyntaxError, Undefined
 from pdfminer.pdfparser import PDFParser
 from pdfminer.pdfdocument import PDFDocument
 from pdfminer.pdfpage import PDFPage
@@ -61,11 +61,11 @@ class Attachment(object):
             for l in lines:
                 # For TrueType fonts, getbbox returns (left, top, right, bottom)
                 # For bitmap fonts (not used here for labels), getsize is (width, height)
-                bbox = font.getbbox(l) 
+                bbox = font.getbbox(l)
                 line_width = bbox[2] - bbox[0]
                 line_height = bbox[3] - bbox[1]
                 dims.append((line_width, line_height))
-            
+
             w = max(w for w, h in dims) if dims else 0
             h = sum(h for w, h in dims) if dims else 0
 
@@ -91,13 +91,16 @@ class Attachment(object):
         pdf.save()
         return PdfReader(stream).pages[0]
 
+class SilentUndefined(Undefined):
+    def _fail_with_undefined_error(self, *args, **kwargs):
+        return ""
 
 class PdfJinja(object):
 
     Attachment = Attachment
 
     def __init__(self, filename, jinja_env=None):
-        self.jinja_env = Environment()
+        self.jinja_env = Environment(undefined=SilentUndefined)
         self.context = None
         self.fields = {}
         self.watermarks = []
@@ -109,7 +112,7 @@ class PdfJinja(object):
     def register_filters(self):
         self.jinja_env.filters.update(dict(
             date=self.format_date,
-            paste=self.paste,
+            paste=lambda v: self.paste(v) if callable(getattr(v, 'read', None)) or isinstance(v, str) else "",
             check=lambda v: "Yes" if v else "Off",
             X=lambda v: "X" if v else " ",
             Y=lambda v: "Y" if v else "N",
@@ -192,7 +195,7 @@ class PdfJinja(object):
         fdf_kwargs = dict(checkbox_checked_name="Yes")
         fdf = forge_fdf("", data.items(), [], [], [], **fdf_kwargs)
         args = [
-            "pdftk",
+            "/usr/bin/pdftk",
             self.filename,
             "fill_form", "-",
             "output", "-",

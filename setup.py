@@ -15,19 +15,18 @@ f.close()
 
 setup(
     name="pdfjinja",
-    version="1.1.0",
+    version="1.1.1",
     author="Ram Mehta",
     author_email="ram.mehta@gmail.com",
-    url="http://github.com/rammie/pdfjinja/",
+    url="https://github.com/biggeektx/pdfjinja/",
     description='Use jinja templates to fill and sign pdf forms.',
     long_description=readme,
     py_modules=["pdfjinja"],
     entry_points={"console_scripts": ["pdfjinja = pdfjinja:main"]},
-    python_requires=">=3.7",
     install_requires=[
         "fdfgen>=0.13.0",
         "jinja2>=2.8",
-        "pdfminer.six>=20231228",
+        "pdfminer.six==20160202",
         "Pillow>=3.2.0",
         "PyPDF2>=3.0.0",
         "reportlab>=3.3.0"
